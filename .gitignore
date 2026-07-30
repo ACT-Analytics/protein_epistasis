@@ -3,6 +3,7 @@
 !.pixi/config.toml
 pixi.lock
 /external_data/*
+/vir_data/*
 .vscode/*
 
 **/__pycache__/
