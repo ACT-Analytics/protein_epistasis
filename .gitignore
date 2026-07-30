@@ -2,7 +2,7 @@
 .pixi/*
 !.pixi/config.toml
 pixi.lock
-external_data/*
+/external_data/*
 .vscode/*
 
 **/__pycache__/
