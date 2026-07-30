@@ -23,7 +23,7 @@ def construct_child_parent_dataframe(child_to_parent_map: dict, score_map:dict)-
 
     rows = []
 
-    for child, (parent1, parent2) in child_to_parent_map.items: 
+    for child, (parent1, parent2) in child_to_parent_map.items(): 
         
         values = {'Child Mutant': __frozen_to_string__(child),
                   'Parent 1': __frozen_to_string__(parent1),
