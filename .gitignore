@@ -1,0 +1,12 @@
+# pixi environments
+.pixi/*
+!.pixi/config.toml
+pixi.lock
+external_data/*
+.vscode/*
+
+**/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+**/.ipynb_checkpoints/
