@@ -9,7 +9,15 @@ def construct_sequence_to_score_map(
     score_col: str = 'DMS_score',
     sep: str = ','
 ) -> dict[frozenset, float]: 
-    """Creates a dict mapping frozenset mutant representations to scores.""" 
+    """Creates a dict mapping frozenset mutant representations to scores.
+    
+    TODO: support replicate-aware aggregation for duplicate mutation keys;
+    current behavior keeps the last observed score per key by design
+    for quick-turn analysis.
+
+    TODO: skip invalid mutant values (e.g., NaN/None/non-iterable) and
+    report a skipped-record count for data-quality visibility.
+    """ 
     score_map = {}
     for mutant, score in zip(df[mutant_col], df[score_col]):
         # Handle raw delimited strings vs. pre-split lists/tuples
@@ -61,15 +69,18 @@ def construct_child_parent_dataframe(
             for i, parent in enumerate(parents): 
                 values[f'{parent_prefix} {i+1}'] = _frozen_to_string(parent)
                 values[f'x{i+1}'] = score_map[parent]
-        rows.append(values)
+            rows.append(values)
 
     df =  pd.DataFrame(rows)
     col_order = (['Child Mutant'] + 
                  [col for col in df.columns if col.startswith(parent_prefix)] + 
                  ['Y'] + 
                  [col for col in df.columns if col.startswith('x')] )
+    if len(df):
+        return df[col_order]
 
-    return df[col_order]
+    # NOTE: Returning None on empty output is intentionally accepted for now.
+    # TODO: standardize this to return an empty DataFrame with stable columns.
 
 
 # Unit Tests

@@ -66,18 +66,21 @@ def construct_child_to_parent_map(
     return double_to_single
 
 
-def get_single_mutants(sequence: frozenset, mutation_number_map:dict): 
-    return [frozenset(single_mutant) for single_mutant in sequence
-            if frozenset(single_mutant) in mutation_number_map[1] ]
+def get_single_mutants(sequence: frozenset, mutation_number_map: dict):
+    singles = mutation_number_map.get(1, {})
+    return [frozenset([single_mutant]) for single_mutant in sequence
+            if frozenset([single_mutant]) in singles]
 
 
 def construct_mutation_to_single_mutation_map(
     mutation_number_map: dict[int, dict[frozenset[str], int]], 
     level: int = 2
-    ) -> dict[frozenset[str], tuple[frozenset[str], frozenset[str]]]: 
+    ) -> dict[frozenset[str],frozenset[str]]:
     """
     Finds all single mutants that contribute to mutant
-    Returns tuple with frozen sets
+    NOTE: returns a variable-length list of singleton frozensets for each
+    mutant key. This is intentional to support level-agnostic child mappings
+    (e.g., doubles, triples, etc.) using a common graph-construction pattern.
     """
 
     mutations = mutation_number_map.get(level, {})
@@ -101,4 +104,14 @@ if __name__ == '__main__':
         assert is_parent_sequence(child, parent) == False
         print("is_parent_sequence assertions passed!")
 
+
+    def test_get_single_mutants():
+        sequence = frozenset(['A1T', 'T2Y'])
+        mutation_map = {1:{frozenset(['A1T']):1, frozenset(['T2Y']):2}}
+
+        print(get_single_mutants(sequence, mutation_map))
+
+
     test_is_parent_sequence()
+    test_get_single_mutants()
+
