@@ -31,26 +31,43 @@ def _frozen_to_string(frozen: frozenset, sep: str = ',') -> str:
     return sep.join(sorted_mutants)
 
 
+def _verify_keys_in_map(keys:list, map:dict): 
+    """Verify every key in list in map"""
+
+    for key in keys: 
+        if key not in map:
+            return False
+    return True
+
+
 def construct_child_parent_dataframe(
     child_to_parent_map: dict[frozenset, tuple[frozenset, frozenset]], 
-    score_map: dict[frozenset, float]
+    score_map: dict[frozenset, float], 
+    parent_prefix:str = 'Parent'
 ) -> pd.DataFrame:
     """Constructs a DataFrame pairing child double mutants with their parent single mutants."""
     rows = []
 
-    for child, (parent1, parent2) in child_to_parent_map.items():  # Fixed .items()
+    for child, parents in child_to_parent_map.items():  # Fixed .items()
         # Safely verify all required variants exist in score_map
-        if child in score_map and parent1 in score_map and parent2 in score_map:
-            rows.append({
+        if child in score_map and _verify_keys_in_map(parents, score_map):
+            values = {
                 'Child Mutant': _frozen_to_string(child),
-                'Parent 1': _frozen_to_string(parent1),
-                'Parent 2': _frozen_to_string(parent2),
                 'Y': score_map[child],
-                'x1': score_map[parent1],
-                'x2': score_map[parent2]
-            })
+            }
 
-    return pd.DataFrame(rows)
+            for i, parent in enumerate(parents): 
+                values[f'{parent_prefix} {i+1}'] = _frozen_to_string(parent)
+                values[f'x{i+1}'] = score_map[parent]
+        rows.append(values)
+
+    df =  pd.DataFrame(rows)
+    col_order = (['Child Mutant'] + 
+                 [col for col in df.columns if col.startswith(parent_prefix)] + 
+                 ['Y'] + 
+                 [col for col in df.columns if col.startswith('x')] )
+
+    return df[col_order]
 
 
 # Unit Tests
@@ -60,3 +77,19 @@ def test_frozen_to_string():
 
     test2 = frozenset({'T275A', 'Q228I', 'A102K'})
     assert _frozen_to_string(test2) == 'A102K,Q228I,T275A'
+    print('_frozen_to_string works!')
+
+
+def test__verify_keys_in_map():
+
+    keys1 = ['apple', 'bannana']
+    keys2 = ['apple', 'bannana', 'pineapple']
+
+    fruit_dict = {'apple':1, 'bannana':2, 'cherry':3}
+    assert _verify_keys_in_map(keys1, fruit_dict)
+    assert not _verify_keys_in_map(keys2, fruit_dict)
+    print('_verify_keys_in_string works!')
+
+
+if __name__ == '__main__':
+    test__verify_keys_in_map()
