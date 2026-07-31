@@ -5,6 +5,8 @@ pixi.lock
 /external_data/*
 /vir_data/*
 .vscode/*
+/notebooks/vir_analysis/*
+
 
 **/__pycache__/
 *.pyc
