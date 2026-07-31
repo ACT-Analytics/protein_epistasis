@@ -1,5 +1,6 @@
 import pandas as pd
 
+
 def construct_mutations_to_index_map(mutants: list[list[str]] | pd.Series) -> dict[frozenset[str], int]:
     """Constructs a mapping from each mutant frozenset to its row index."""
     return {frozenset(mutant): i for i, mutant in enumerate(mutants)}
@@ -67,7 +68,7 @@ def construct_child_to_parent_map(
 
 def get_single_mutants(sequence: frozenset, mutation_number_map:dict): 
     return [frozenset(single_mutant) for single_mutant in sequence
-            if frozenset(mutation) in mutation_number_map[1] ]
+            if frozenset(single_mutant) in mutation_number_map[1] ]
 
 
 def construct_mutation_to_single_mutation_map(

@@ -1,5 +1,7 @@
-import pandas as pd
 import re
+
+import pandas as pd
+
 
 def construct_sequence_to_score_map(
     df: pd.DataFrame,
