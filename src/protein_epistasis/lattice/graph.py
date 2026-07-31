@@ -50,7 +50,7 @@ def find_parent_sequences(
 
 
 def construct_child_to_parent_map(
-    mutation_number_map: dict[int, dict[frozenset[str], int]], 
+    mutation_number_map: dict[int,dict[frozenset[str], int]], 
     level: int = 2
 ) -> dict[frozenset[str], tuple[frozenset[str], frozenset[str]]]: 
     """Creates a mapping from child double mutant to its two single-mutant parents."""
@@ -64,6 +64,31 @@ def construct_child_to_parent_map(
 
     return double_to_single
 
+
+def get_single_mutants(sequence: frozenset, mutation_number_map:dict): 
+    return [frozenset(single_mutant) for single_mutant in sequence
+            if frozenset(mutation) in mutation_number_map[1] ]
+
+
+def construct_mutation_to_single_mutation_map(
+    mutation_number_map: dict[int, dict[frozenset[str], int]], 
+    level: int = 2
+    ) -> dict[frozenset[str], tuple[frozenset[str], frozenset[str]]]: 
+    """
+    Finds all single mutants that contribute to mutant
+    Returns tuple with frozen sets
+    """
+
+    mutations = mutation_number_map.get(level, {})
+    mutation_to_single_mutants = {}
+
+    for mutant in mutations:
+        single_mutants = get_single_mutants(mutant, mutation_number_map)
+        if len(single_mutants) == len(mutant):  # Safe check: skips over mutants that don't have all single mutants in measured set. 
+            mutation_to_single_mutants[mutant] = single_mutants
+
+    return mutation_to_single_mutants
+    
 
 if __name__ == '__main__':
     def test_is_parent_sequence():
