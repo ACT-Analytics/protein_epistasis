@@ -17,7 +17,8 @@ def construct_mutation_number_map(mutations: list[list[str]] | pd.Series) -> dic
     for i, mutant in enumerate(mutations): 
         f_mutant = frozenset(mutant)
         num_mutations = len(f_mutant)
-        mutation_number_map.setdefault(num_mutations, {})[f_mutant] = i
+        #Note: I changed the assignment below from i to num_mutations. i is for index. May go back.
+        mutation_number_map.setdefault(num_mutations, {})[f_mutant] = num_mutations
     return mutation_number_map
 
 
