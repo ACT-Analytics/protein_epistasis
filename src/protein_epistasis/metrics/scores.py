@@ -1,13 +1,14 @@
-import re
-
 import pandas as pd
+
+from protein_epistasis.utils import _frozen_to_string
 
 
 def construct_sequence_to_score_map(
     df: pd.DataFrame,
     mutant_col: str = 'mutant',
     score_col: str = 'DMS_score',
-    sep: str = ','
+    sep: str = ',',
+    use_frozen_set_for_keys: bool= True
 ) -> dict[frozenset, float]: 
     """Creates a dict mapping frozenset mutant representations to scores.
     
@@ -21,24 +22,17 @@ def construct_sequence_to_score_map(
     score_map = {}
     for mutant, score in zip(df[mutant_col], df[score_col]):
         # Handle raw delimited strings vs. pre-split lists/tuples
-        if isinstance(mutant, str):
-            mutant_set = frozenset(m.strip() for m in mutant.split(sep) if m.strip())
-        else:
-            mutant_set = frozenset(mutant)
-            
-        score_map[mutant_set] = float(score)
         
+        if use_frozen_set_for_keys:
+            if isinstance(mutant, str):
+                mutant_set = frozenset(m.strip() for m in mutant.split(sep) if m.strip())
+            else:
+                mutant_set = frozenset(mutant)
+                
+            score_map[mutant_set] = float(score)
+        else:
+            score_map[mutant] = score
     return score_map
-
-
-def _frozen_to_string(frozen: frozenset, sep: str = ',') -> str:
-    """Converts a frozenset of mutations into a position-sorted string."""
-    def _extract_pos(mut_str: str) -> int:
-        match = re.search(r'\d+', mut_str)
-        return int(match.group()) if match else 0
-
-    sorted_mutants = sorted(frozen, key=_extract_pos)
-    return sep.join(sorted_mutants)
 
 
 def _verify_keys_in_map(keys:list, map:dict): 
