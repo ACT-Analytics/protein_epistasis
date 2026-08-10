@@ -1,7 +1,8 @@
 # code for parsing inputs.abs
 
-import pandas as pd
 from pathlib import Path
+
+import pandas as pd
 
 
 def load_and_process_protein_gym_file(path: Path|str)->pd.DataFrame: 
