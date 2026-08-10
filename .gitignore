@@ -13,3 +13,7 @@ pixi.lock
 *.pyo
 *.pyd
 **/.ipynb_checkpoints/
+*.png
+*.jpg
+*.jpeg
+*.gif
