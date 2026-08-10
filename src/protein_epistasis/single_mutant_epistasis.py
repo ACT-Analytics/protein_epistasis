@@ -68,11 +68,11 @@ def compute_epistasis(
     metric: str = "delta TM",
     temp_k: float = 298.15,
 ) -> pd.DataFrame:
-    cols = [col for col in df.columns if col != mutant_score_col]
+    sm_cols = [col for col in df.columns if col != mutant_score_col]
 
     # 1. Thermal Shift: Additive Model
     if metric == "delta TM":
-        sum_sm = df[cols].sum(axis=1)
+        sum_sm = df[sm_cols].sum(axis=1)
         epistasis = df[mutant_score_col] - sum_sm
         return df.assign(
             Sum_Single_Mutant_delta_TM=sum_sm,
@@ -84,32 +84,36 @@ def compute_epistasis(
     # DDG = RT * ln(KD_mut / KD_wt) = RT * ln(1 / Y)
     if metric == "KD FC":
         RT = R_KCAL * temp_k
-        prod_sm = df[cols].replace(0, 1).prod(axis=1)
-        
+        prod_sm = df[sm_cols].replace(0, 1).prod(axis=1)
         ddg_mut = RT * np.log(1.0 / df[mutant_score_col])
         ddg_sum = RT * np.log(1.0 / prod_sm)
         epistasis = ddg_mut - ddg_sum
         return df.assign(
+            KD_FC_mutant=df[mutant_score_col],
+            KD_FC_sm_prod = prod_sm,
+            epistasis_KD_FC = df[mutant_score_col] / prod_sm,
             DDG_mutant=ddg_mut,
             DDG_sum_sm=ddg_sum,
             epistasis_KD=epistasis,  # >0 means weaker binding than expected
-            positive_epistasis_KD = epistasis<0
+            synergy_kd = epistasis<0
         )
 
     # 3. EC50 Fold Improvement (Input = WT / Mutant)
     # Log Improvement Epistasis = ln(Y_observed) - sum(ln(x_single_mutants))
     if metric == "EC50 FI":
-        prod_sm = df[cols].replace(0, 1).prod(axis=1)
-        
-        log_mut = np.log(df[mutant_score_col])
-        log_sum = np.log(prod_sm)
+        prod_sm = df[sm_cols].replace(0, 1).prod(axis=1)
+        log_mut = np.log(1/df[mutant_score_col])
+        log_sum = np.log(1.0 / prod_sm)
         epistasis = log_mut - log_sum
         return df.assign(
             **{
-                "LogEC50(wt/mut)": log_mut,
+                "EC50(wt/mut)" : df[mutant_score_col],
+                "EC50(prod(wt/sm))": prod_sm,
+                "epistasis EC50 FI":df[mutant_score_col]/prod_sm,
+                "LogEC50(mut/wt)": log_mut,
                 "LogEC50(prod(sm)/wt)": log_sum,
-                "epistasis_EC50": epistasis,  # >0 means synergistic potency gain
-                "positive_epistasis_EC50": epistasis >0
+                "epistasis_LogEC50": epistasis,  # >0 means synergistic potency gain
+                "positive_epistasis_EC50": df[mutant_score_col]/prod_sm>1
             }
         )
 
@@ -156,3 +160,9 @@ def construct_epistasis_table(
         table = table.drop(columns=single_mutant_scores.index)
         
     return table
+
+
+# TODO: Center Plots to be equal aspect. 
+# TODO: Put into multiplicative. 
+# TODO: Change symbol for ones that use IP2. 
+# Plot: IP2 and IP1 on histograms to compare. 
