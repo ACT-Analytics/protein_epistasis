@@ -7,7 +7,7 @@ pixi.lock
 .vscode/*
 /notebooks/vir_analysis/*
 
-
+# specific files and locations. 
 **/__pycache__/
 *.pyc
 *.pyo
@@ -17,3 +17,4 @@ pixi.lock
 *.jpg
 *.jpeg
 *.gif
+.DS_Store
