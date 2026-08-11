@@ -4,8 +4,6 @@ import pandas as pd
 import seaborn as sns
 from matplotlib.axes import Axes
 
-from .config import PLOT_PARAMETERS
-
 
 def scatter_plot_with_identity(
     df: pd.DataFrame,
@@ -13,6 +11,8 @@ def scatter_plot_with_identity(
     y_col: str,
     ax: Axes,
     hue: str = "Number of Mutations",
+    style: str | None = None,  # Column for distinct marker shapes
+    marker: str | dict | None = None,  # Fixed shape (e.g. 's', '^', 'D') or dict map
     palette: str = "colorblind",
     xlabel: str | None = None,
     ylabel: str | None = None,
@@ -28,7 +28,7 @@ def scatter_plot_with_identity(
 ) -> Axes:
     data = df.copy()
 
-    # 0. Log transformation handling
+    # Log transformation
     if use_log:
         log_fn = np.log10 if log_base == 10 else (np.log2 if log_base == 2 else np.log)
         x_plot = f"_log_{x_col}"
@@ -36,13 +36,21 @@ def scatter_plot_with_identity(
         data[x_plot] = log_fn(data[x_col])
         data[y_plot] = log_fn(data[y_col])
 
-        # Convert reference values (e.g. 1 -> log(1) = 0)
         if ref_lines is not None:
             if isinstance(ref_lines, (int, float)):
                 ref_lines = (ref_lines,)
             ref_lines = tuple(log_fn(val) for val in ref_lines if val > 0)
     else:
         x_plot, y_plot = x_col, y_col
+
+    # Prepare marker / style arguments for Seaborn
+    scatter_kwargs = {}
+    if style is not None:
+        scatter_kwargs["style"] = style
+        if isinstance(marker, (dict, list)):
+            scatter_kwargs["markers"] = marker
+    elif marker is not None and isinstance(marker, str):
+        scatter_kwargs["marker"] = marker
 
     # Scatter plot
     ax = sns.scatterplot(
@@ -57,12 +65,13 @@ def scatter_plot_with_identity(
         linewidth=0.3,
         ax=ax,
         s=markersize,
+        **scatter_kwargs,
     )
 
-    # 1. Identity line (y = x)
+    # Identity line (y = x)
     ax.axline((0, 0), slope=1, color="#4A5568", linestyle="--", alpha=0.3)
 
-    # 2. Reference lines
+    # Reference lines
     if ref_lines is not None:
         if isinstance(ref_lines, (int, float)):
             ref_lines = (ref_lines,)
@@ -76,7 +85,7 @@ def scatter_plot_with_identity(
         ylabel = y_col.replace("_", " ")
     ax.set(xlabel=xlabel, ylabel=ylabel, title=title)
 
-    # 3. Determine identical limits including (0, 0)
+    # Determine identical limits
     if limits is not None:
         low, high = limits
     elif center is not None:
@@ -108,7 +117,6 @@ def scatter_plot_with_identity(
         low = min(low, 0)
         high = max(high, 0)
 
-    # 4. Apply identical limits and force 1:1 ratio
     ax.set_xlim(low, high)
     ax.set_ylim(low, high)
     ax.set_aspect("equal", adjustable="box")
@@ -123,6 +131,7 @@ def plot_epi_scatterplots(
     width: float = 6,
     height: float = 6,
     markersize: float = 100,
+    title_fontsize: int = 20,
 ):
     if not measurements:
         measurements = ["delta TM", "Binding Multiplicative", "EC50 Multiplicative"]
@@ -141,7 +150,19 @@ def plot_epi_scatterplots(
             df, ax=ax, markersize=markersize, **PLOT_PARAMETERS[measurement]
         )
 
-    fig.suptitle(f"Scatter plots for epistasis for {dataset}", fontsize=16)
+    title_text = (
+        f"Scatter plots for epistasis for {dataset}"
+        if dataset
+        else "Scatter plots for epistasis"
+    )
+
+    # 1. Increase font size and raise the suptitle vertical position (y=1.02)
+    fig.suptitle(title_text, fontsize=title_fontsize, y=1.02, fontweight="bold")
+
     sns.despine()
+
+    # 2. Tighten layout first, then adjust top spacing to prevent collisions
     plt.tight_layout()
+    fig.subplots_adjust(top=0.85)
+
     return fig
