@@ -188,8 +188,8 @@ def plot_epi_scatterplots_plotly(
     dataset: str = "",
     measurements: list[str] | str | None = None,
     hue: str = "Number of Mutations",
-    width_per_plot: int = 420,
-    height: int = 450,
+    width_per_plot: int = 600,
+    height: int = 600,
     markersize: int = 8,
     palette: list[str] | None = None,
 ) -> go.Figure:
