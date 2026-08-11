@@ -4,6 +4,8 @@ import pandas as pd
 import seaborn as sns
 from matplotlib.axes import Axes
 
+from .config import PLOT_PARAMETERS
+
 
 def scatter_plot_with_identity(
     df: pd.DataFrame,
