@@ -271,7 +271,45 @@ def assign_tm(row: pd.Series) -> float:
     return float(ip1)
 
 
-def preprocess_pipeline(df, assign_tm:bool = True):
+def compute_KD_FC(
+    df: pd.DataFrame, 
+    kd_col: str = 'KD (M)', 
+    seq_type_col: str = 'seq_type', 
+    parental_val: str = 'parental',
+    output_name: str = 'KD FC',
+    baseline_kd: float| None = None, 
+    convert_to_nM: bool =False
+    ) -> pd.DataFrame:
+
+    df = df.copy()
+    
+    if convert_to_nM:
+        df['KD (nM)'] = df[kd_col]*1e9
+        kd_col = 'KD (nM)'
+
+    if baseline_kd is not None:
+        parental_kd = float(baseline_kd)
+    else:
+        parental_mask = df[seq_type_col] == parental_val
+        parental_subset = df.loc[parental_mask, kd_col]
+        
+        if parental_subset.empty:
+            raise ValueError(f"No rows found with {seq_type_col} == '{parental_val}' to calculate baseline kd.")
+        
+        # Extract scalar value safely whether there's 1 averaged row or multiple parental rows
+        parental_kd = float(parental_subset.iloc[0] if len(parental_subset) == 1 else parental_subset.mean())
+    
+    # Delta Tm = Sample Tm - Baseline Tm (Subtracts baseline scalar float from each row's Tm)
+    df[output_name] = df[kd_col]/ parental_kd
+    return df
+
+
+def preprocess_pipeline(
+    df,
+    assign_tm:bool = True,
+    calculate_kd_FC:bool = False,
+    convert_to_nM: bool = False
+    )-> pd.DataFrame:
 
     df = df.copy()
 
@@ -288,6 +326,10 @@ def preprocess_pipeline(df, assign_tm:bool = True):
     # Step 4: Compute delta TM relative to parental baseline (25.0°C)
     df = compute_tm_delta(df)
     
+    # Step 5: Compute the relative KD if required
+    if calculate_kd_FC:
+        df = compute_KD_FC(df,convert_to_nM=convert_to_nM)
+
     return df
 
 
