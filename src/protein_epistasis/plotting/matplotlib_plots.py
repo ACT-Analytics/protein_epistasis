@@ -149,11 +149,13 @@ def plot_epi_scatterplots(
         axes = [axes]
 
     for ax, measurement in zip(axes, measurements):
-        
+
         if style is not None and isinstance(style, dict):
             current_style = style.get(measurement, None)
         elif style is not None and isinstance(style, str):
             current_style = style
+        else:
+            current_style = None
 
         scatter_plot_with_identity(
             df,

@@ -109,7 +109,7 @@ def add_scatter_with_identity_to_plotly(
         low = min(low, 0)
         high = max(high, 0)
 
-    # Symbol resolution
+    # Symbol resolution helper
     def get_symbol_name(sym):
         return MATPLOTLIB_TO_PLOTLY_SYMBOLS.get(sym, sym)
 
@@ -123,53 +123,31 @@ def add_scatter_with_identity_to_plotly(
         "star",
     ]
 
-    # Build Plotly Traces grouped by hue and style
-    group_cols = []
+    # Map style column values to marker shapes
+    style_symbol_map = {}
+    unique_styles = []
+    if style and style in data.columns:
+        unique_styles = sorted(data[style].dropna().unique())
+        if isinstance(symbol, dict):
+            style_symbol_map = {
+                s: get_symbol_name(symbol.get(s, "circle")) for s in unique_styles
+            }
+        elif isinstance(symbol, str):
+            style_symbol_map = {s: get_symbol_name(symbol) for s in unique_styles}
+        else:
+            style_symbol_map = {
+                s: plotly_symbols_cycle[i % len(plotly_symbols_cycle)]
+                for i, s in enumerate(unique_styles)
+            }
+
+    # 1. GROUP BY HUE ONLY (Color Traces)
     if hue in data.columns:
-        group_cols.append(hue)
-    if style and style in data.columns and style != hue:
-        group_cols.append(style)
+        grouped = data.groupby(hue, observed=True)
 
-    if group_cols:
-        grouped = data.groupby(group_cols, observed=True)
-
-        # Style mapping dictionary
-        style_symbol_map = {}
-        if style and style in data.columns:
-            unique_styles = sorted(data[style].unique())
-            if isinstance(symbol, dict):
-                style_symbol_map = {
-                    s: get_symbol_name(symbol.get(s, "circle")) for s in unique_styles
-                }
-            elif isinstance(symbol, str):
-                style_symbol_map = {s: get_symbol_name(symbol) for s in unique_styles}
-            else:
-                style_symbol_map = {
-                    s: plotly_symbols_cycle[i % len(plotly_symbols_cycle)]
-                    for i, s in enumerate(unique_styles)
-                }
-
-        for group_key, sub_df in grouped:
-            raw_hue_val = sub_df[hue].iloc[0] if hue in data.columns else None
-            raw_style_val = (
-                sub_df[style].iloc[0]
-                if (style and style in data.columns)
-                else None
-            )
-
+        for raw_hue_val, sub_df in grouped:
             hue_str = clean_fmt(raw_hue_val)
-            style_str = clean_fmt(raw_style_val)
-
-            # Internal group ID for trace linking
-            leg_group = f"{hue_str}_{style_str}" if style_str else hue_str
-
-            # Human-readable display label in the legend
-            if hue_str and style_str:
-                display_name = f"{hue_str} ({style_str})"
-            elif hue_str:
-                display_name = hue_str
-            else:
-                display_name = style_str or ""
+            leg_group = f"hue_{hue}_{hue_str}"
+            display_name = hue_str
 
             show_leg = False
             if seen_legend_groups is not None and leg_group not in seen_legend_groups:
@@ -178,35 +156,37 @@ def add_scatter_with_identity_to_plotly(
 
             color = color_map.get(raw_hue_val) if color_map else None
 
-            # Resolve marker symbol
-            if raw_style_val and raw_style_val in style_symbol_map:
-                marker_symbol = style_symbol_map[raw_style_val]
+            # Map symbols array per point if style is present
+            if style and style in sub_df.columns:
+                marker_symbols = [
+                    style_symbol_map.get(s, "circle") for s in sub_df[style]
+                ]
             elif isinstance(symbol, str):
-                marker_symbol = get_symbol_name(symbol)
+                marker_symbols = get_symbol_name(symbol)
             else:
-                marker_symbol = "circle"
+                marker_symbols = "circle"
 
-            # Build Hover Text / Template
-            hover_text_lines = []
-            if hue_str:
-                hover_text_lines.append(f"<b>{hue}: {hue_str}</b>")
-            if style_str:
-                hover_text_lines.append(f"<b>{style}: {style_str}</b>")
+            # Setup hover data
+            valid_hover_cols = []
+            if style and style in sub_df.columns:
+                valid_hover_cols.append(style)
+            for c in hover_cols:
+                if c in sub_df.columns and c not in valid_hover_cols:
+                    valid_hover_cols.append(c)
+
+            hover_text_lines = [f"<b>{hue}: {hue_str}</b>"]
+            customdata = None
+            if valid_hover_cols:
+                customdata = sub_df[valid_hover_cols].values
+                for idx, hcol in enumerate(valid_hover_cols):
+                    hover_text_lines.append(f"<b>{hcol}</b>: %{{customdata[{idx}]}}")
+
             hover_text_lines.append(
                 f"{'log10(' if use_log else ''}{x_col}{')' if use_log else ''}: %{{x:.3f}}"
             )
             hover_text_lines.append(
                 f"{'log10(' if use_log else ''}{y_col}{')' if use_log else ''}: %{{y:.3f}}"
             )
-
-            # Extra hover metadata columns
-            customdata = None
-            if hover_cols:
-                valid_hover_cols = [c for c in hover_cols if c in sub_df.columns]
-                if valid_hover_cols:
-                    customdata = sub_df[valid_hover_cols].values
-                    for idx, hcol in enumerate(valid_hover_cols):
-                        hover_text_lines.append(f"{hcol}: %{{customdata[{idx}]}}")
 
             hover_template = "<br>".join(hover_text_lines) + "<extra></extra>"
 
@@ -222,6 +202,59 @@ def add_scatter_with_identity_to_plotly(
                     marker={
                         "size": markersize,
                         "color": color,
+                        "symbol": marker_symbols,
+                        "line": {"width": 0.5, "color": "black"},
+                        "opacity": 0.75,
+                    },
+                    hovertemplate=hover_template,
+                ),
+                row=row,
+                col=col,
+            )
+
+    # 2. GROUP BY STYLE ONLY (if hue is absent)
+    elif style and style in data.columns:
+        grouped = data.groupby(style, observed=True)
+        for raw_style_val, sub_df in grouped:
+            style_str = clean_fmt(raw_style_val)
+            leg_group = f"style_{style}_{style_str}"
+            display_name = style_str
+
+            show_leg = False
+            if seen_legend_groups is not None and leg_group not in seen_legend_groups:
+                show_leg = True
+                seen_legend_groups.add(leg_group)
+
+            marker_symbol = style_symbol_map.get(raw_style_val, "circle")
+
+            valid_hover_cols = [c for c in hover_cols if c in sub_df.columns]
+            hover_text_lines = [f"<b>{style}: {style_str}</b>"]
+            customdata = None
+            if valid_hover_cols:
+                customdata = sub_df[valid_hover_cols].values
+                for idx, hcol in enumerate(valid_hover_cols):
+                    hover_text_lines.append(f"<b>{hcol}</b>: %{{customdata[{idx}]}}")
+
+            hover_text_lines.append(
+                f"{'log10(' if use_log else ''}{x_col}{')' if use_log else ''}: %{{x:.3f}}"
+            )
+            hover_text_lines.append(
+                f"{'log10(' if use_log else ''}{y_col}{')' if use_log else ''}: %{{y:.3f}}"
+            )
+
+            hover_template = "<br>".join(hover_text_lines) + "<extra></extra>"
+
+            fig.add_trace(
+                go.Scatter(
+                    x=sub_df[x_plot],
+                    y=sub_df[y_plot],
+                    mode="markers",
+                    name=display_name,
+                    legendgroup=leg_group,
+                    showlegend=show_leg,
+                    customdata=customdata,
+                    marker={
+                        "size": markersize,
                         "symbol": marker_symbol,
                         "line": {"width": 0.5, "color": "black"},
                         "opacity": 0.75,
@@ -244,7 +277,7 @@ def add_scatter_with_identity_to_plotly(
             if valid_hover_cols:
                 customdata = data[valid_hover_cols].values
                 for idx, hcol in enumerate(valid_hover_cols):
-                    hover_text_lines.append(f"{hcol}: %{{customdata[{idx}]}}")
+                    hover_text_lines.append(f"<b>{hcol}</b>: %{{customdata[{idx}]}}")
 
         fig.add_trace(
             go.Scatter(
@@ -264,6 +297,36 @@ def add_scatter_with_identity_to_plotly(
             row=row,
             col=col,
         )
+
+    # 3. DUMMY LEGEND ENTRIES FOR SHAPES (when both hue and style are present)
+    if hue in data.columns and style and style in data.columns:
+        for style_val in unique_styles:
+            style_str = clean_fmt(style_val)
+            style_leg_key = f"dummy_shape_{style}_{style_str}"
+
+            if (
+                seen_legend_groups is not None
+                and style_leg_key not in seen_legend_groups
+            ):
+                seen_legend_groups.add(style_leg_key)
+                fig.add_trace(
+                    go.Scatter(
+                        x=[None],
+                        y=[None],
+                        mode="markers",
+                        name=f"{style}: {style_str}",
+                        legendgroup=f"shape_key_{style_str}",
+                        showlegend=True,
+                        marker={
+                            "size": markersize,
+                            "color": "#4A5568",  # Neutral dark slate color
+                            "symbol": style_symbol_map[style_val],
+                            "line": {"width": 0.5, "color": "black"},
+                        },
+                    ),
+                    row=row,
+                    col=col,
+                )
 
     # Identity Line (y = x)
     fig.add_trace(
@@ -315,18 +378,15 @@ def add_scatter_with_identity_to_plotly(
 
     return fig
 
+
 def plot_epi_scatterplots_plotly(
     df: pd.DataFrame,
     dataset: str = "",
     measurements: list[str] | str | None = None,
     hue: str = "Number of Mutations",
-    style: (
-        str | dict | None
-    ) = None,  # Categorical column name OR dict mapping measurement -> column
-    symbol: (
-        str | dict | None
-    ) = None,  # Symbol name, style-to-symbol dict, OR measurement-to-symbol dict
-    hover_data: list[str] | str | None = None,  # Metadata cols for hover
+    style: str | dict | None = None,  # Categorical column or dict map
+    symbol: str | dict | None = None,  # Symbol name or dict map
+    hover_data: list[str] | str | None = None,
     width_per_plot: int = 420,
     height: int = 450,
     markersize: int = 8,
@@ -359,10 +419,8 @@ def plot_epi_scatterplots_plotly(
     for col_idx, measurement in enumerate(measurements, start=1):
         params = PLOT_PARAMETERS[measurement]
 
-        # 1. Resolve current style safely
         current_style = style.get(measurement) if isinstance(style, dict) else style
 
-        # 2. Resolve current symbol if parameterized per measurement
         if isinstance(symbol, dict) and any(m in symbol for m in measurements):
             current_symbol = symbol.get(measurement)
         else:
@@ -393,12 +451,22 @@ def plot_epi_scatterplots_plotly(
         if dataset
         else "Scatter plots for epistasis"
     )
+
+    # Dynamic legend title
+    legend_title_parts = []
+    if hue in df.columns:
+        legend_title_parts.append(hue)
+    if isinstance(style, str) and style in df.columns and style != hue:
+        legend_title_parts.append(style)
+
+    legend_title = " / ".join(legend_title_parts) if legend_title_parts else None
+
     fig.update_layout(
         title={"text": title_text, "font": {"size": 18}, "x": 0.5},
         width=width_per_plot * n_cols,
         height=height,
         template="plotly_white",
-        legend_title_text=hue if hue in df.columns else None,
+        legend_title_text=legend_title,
     )
 
     return fig
