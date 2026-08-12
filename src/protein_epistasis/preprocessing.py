@@ -244,6 +244,7 @@ def assign_tm_vectorized(
     """
     df = df.copy()
     df[output_name] = df[ip2_col].fillna(df[ip1_col])
+    df['hasIP2'] = df[ip2_col].notnull()
     return df
 
 

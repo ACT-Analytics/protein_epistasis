@@ -134,6 +134,7 @@ def plot_epi_scatterplots(
     height: float = 6,
     markersize: float = 100,
     title_fontsize: int = 20,
+    style: str | None = None,
 ):
     if not measurements:
         measurements = ["delta TM", "Binding Multiplicative", "EC50 Multiplicative"]
@@ -148,8 +149,18 @@ def plot_epi_scatterplots(
         axes = [axes]
 
     for ax, measurement in zip(axes, measurements):
+        
+        if style is not None and isinstance(style, dict):
+            current_style = style.get(measurement, None)
+        elif style is not None and isinstance(style, str):
+            current_style = style
+
         scatter_plot_with_identity(
-            df, ax=ax, markersize=markersize, **PLOT_PARAMETERS[measurement]
+            df,
+            ax=ax,
+            markersize=markersize,
+            style=current_style,
+            **PLOT_PARAMETERS[measurement],
         )
 
     title_text = (
