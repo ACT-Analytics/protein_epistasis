@@ -158,7 +158,7 @@ def construct_epistasis_table(
     table = compute_epistasis(table, mutant_score_col=new_score_name, metric=score_col)
     if remove_single_mutant_cols:
         table = table.drop(columns=single_mutant_scores.index)
-        
+    
     return table
 
 

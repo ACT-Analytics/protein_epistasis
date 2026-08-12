@@ -387,8 +387,8 @@ def plot_epi_scatterplots_plotly(
     style: str | dict | None = None,  # Categorical column or dict map
     symbol: str | dict | None = None,  # Symbol name or dict map
     hover_data: list[str] | str | None = None,
-    width_per_plot: int = 420,
-    height: int = 450,
+    width_per_plot: int = 588,
+    height: int = 630,
     markersize: int = 8,
     palette: list[str] | None = None,
 ) -> go.Figure:
