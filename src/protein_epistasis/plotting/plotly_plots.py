@@ -470,3 +470,142 @@ def plot_epi_scatterplots_plotly(
     )
 
     return fig
+
+
+def plot_regression_results(
+    model,
+    X,
+    y,
+    target_name=None,
+    feature_names=None,
+    title=None,
+    model_name="ElasticNet",
+    hovertext:str|None=None, 
+    width:float=1000, 
+    height: float=600
+):
+    """Plots non-zero regression coefficients alongside predicted vs.
+
+    actual values, dynamically adapting to any target variable `y`.
+
+    Parameters:
+    -----------
+    model : fitted estimator
+        Trained regression model with `.predict()` and `.coef_`.
+    X : array-like or pd.DataFrame
+        Feature matrix.
+    y : array-like or pd.Series
+        True target values.
+    target_name : str, optional
+        Label for the target variable (e.g., 'ΔT<sub>m</sub>', 'IC50', 'Yield').
+        If None, attempts to infer from `y.name` or defaults to 'Target'.
+    feature_names : list-like, optional
+        Names of the features. Inferred if X is a DataFrame.
+    title : str, optional
+        Custom main figure title. If None, auto-generated from model and target names.
+    model_name : str, default='ElasticNet'
+        Name of the model to display in titles.
+
+    Returns:
+    --------
+    fig : plotly.graph_objects.Figure
+    """
+    # 1. Infer target name if not provided
+    if target_name is None:
+        target_name = (
+            getattr(y, "name", None) if getattr(y, "name", None) else "Target"
+        )
+
+    # 2. Predictions & target array
+    preds = model.predict(X)
+    y_true = np.asarray(y).ravel()
+
+    # 3. Extract feature names and non-zero coefficients
+    if feature_names is None:
+        if hasattr(X, "columns"):
+            feature_names = X.columns
+        else:
+            feature_names = [f"Feature {i}" for i in range(len(model.coef_))]
+
+    coef_series = pd.Series(model.coef_, index=feature_names)
+    selected_coefs = coef_series[coef_series != 0].sort_values()
+
+    # 4. Reference line limits (y = x)
+    min_val = float(min(np.min(y_true), np.min(preds)))
+    max_val = float(max(np.max(y_true), np.max(preds)))
+
+    # 5. Build Subplots
+    fig = make_subplots(
+        rows=1,
+        cols=2,
+        subplot_titles=(
+            f"Non-Zero Coefficients ({model_name})",
+            f"Predicted vs. True ({target_name})",
+        ),
+        horizontal_spacing=0.15,
+    )
+
+    # Subplot 1: Coefficients
+    fig.add_trace(
+        go.Bar(
+            x=selected_coefs.values,
+            y=selected_coefs.index.astype(str),
+            orientation="h",
+            name="Coefficients",
+            marker={"color": "#4C72B0"},
+            showlegend=False,
+        ),
+        row=1,
+        col=1,
+    )
+
+    # Subplot 2: Predicted vs Actual Scatter
+    fig.add_trace(
+        go.Scatter(
+            x=y_true,
+            y=preds,
+            mode="markers",
+            name="Predictions",
+            marker={"size": 7, "opacity": 0.7, "color": "#55A868"},
+            hovertext = hovertext,
+            showlegend=False,
+        ),
+        row=1,
+        col=2,
+    )
+
+    # Subplot 2: Identity reference line
+    fig.add_shape(
+        type="line",
+        x0=min_val,
+        y0=min_val,
+        x1=max_val,
+        y1=max_val,
+        line={"color": "grey", "dash": "dash", "width": 1.5},
+        opacity=0.4,
+        row=1,
+        col=2,
+    )
+
+    # 6. Dynamic Axis Labels & Layout
+    fig.update_xaxes(title_text="Coefficient Value", row=1, col=1)
+    fig.update_yaxes(title_text="Feature", row=1, col=1)
+
+    fig.update_xaxes(title_text=f"{target_name} (True)", row=1, col=2)
+    fig.update_yaxes(title_text=f"{target_name} (Predicted)", row=1, col=2)
+
+    main_title = (
+        title
+        if title is not None
+        else f"Results of {model_name} Fit for {target_name}"
+    )
+
+    fig.update_layout(
+        title={"text": main_title, "x": 0.5, "xanchor": "center"},
+        template="plotly_white",
+        width=width,
+        height=height,
+        margin={"t": 80, "b": 50, "l": 70, "r": 40},
+    )
+
+    return fig

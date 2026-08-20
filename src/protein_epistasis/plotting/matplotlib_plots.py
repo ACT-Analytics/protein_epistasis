@@ -1,8 +1,12 @@
+# Authored By Christopher Rivera and Gemini.
+
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
 from matplotlib.axes import Axes
+from sklearn.linear_model import ElasticNet
+from sklearn.model_selection import KFold
 
 from .config import PLOT_PARAMETERS
 
@@ -149,7 +153,6 @@ def plot_epi_scatterplots(
         axes = [axes]
 
     for ax, measurement in zip(axes, measurements):
-
         if style is not None and isinstance(style, dict):
             current_style = style.get(measurement, None)
         elif style is not None and isinstance(style, str):
@@ -181,3 +184,89 @@ def plot_epi_scatterplots(
     fig.subplots_adjust(top=0.85)
 
     return fig
+
+
+def plot_elasticnet_tm_coefficients(
+    fitted_model, X, y, feature_names=None, ax=None, font_size=14, markersize=10, cv=10
+):
+    """
+    Extracts non-zero coefficients from ElasticNetCV, calculates CV error bars,
+    and plots a sorted horizontal coefficient plot for Tm changes.
+    """
+    if ax is None:
+        _, ax = plt.subplots(figsize=(8, len(feature_names) * 0.4 + 2))
+
+    # --- 1. Extract and Filter Coefficients ---
+    if not feature_names:
+        feature_names = fitted_model.feature_names_in_
+
+    df = pd.DataFrame({"Feature": feature_names, "Coef": fitted_model.coef_})
+    # Keep only the mutations that feature selection didn't drop
+    df = df[df["Coef"] != 0].copy()
+
+    if df.empty:
+        print("No non-zero coefficients found by the Elastic Net model.")
+        return ax
+
+    # --- 2. Calculate Coefficient Stability (Error Bars) ---
+    best_alpha = fitted_model.alpha_
+    best_l1 = fitted_model.l1_ratio_
+
+    # Use the same number of cv folds as your ElasticNetCV (default is 5)
+    cv = KFold(n_splits=cv, shuffle=True, random_state=42)
+    cv_coefs = []
+
+    # Convert X and y to numpy arrays for reliable indexing
+    X_arr = np.array(X)
+    y_arr = np.array(y)
+
+    for train_idx, _ in cv.split(X_arr):
+        fold_model = ElasticNet(
+            alpha=best_alpha, l1_ratio=best_l1, max_iter=fitted_model.max_iter
+        )
+        fold_model.fit(X_arr[train_idx], y_arr[train_idx])
+        cv_coefs.append(fold_model.coef_)
+
+    # Map the standard deviation of the fold coefficients back to the active features
+    coef_std = np.std(cv_coefs, axis=0)
+    df["Error"] = coef_std[df.index]
+
+    # Sort from largest negative effect to largest positive effect (reads bottom-to-top)
+    df = df.sort_values(by="Coef", ascending=True).reset_index(drop=True)
+
+    # --- 3. Plotting ---
+    # Assign intuitive colors: crimson for destabilizing (<0), teal for stabilizing (>0)
+    colors = ["crimson" if c < 0 else "teal" for c in df["Coef"]]
+
+    # Draw the horizontal error bars and markers
+    ax.errorbar(
+        df["Coef"],
+        df["Feature"],
+        xerr=df["Error"],
+        fmt="o",
+        color="black",
+        ecolor="gray",
+        capsize=3,
+        elinewidth=1.5,
+        ms=markersize/2,
+    )
+    # Overlay the colored scatter points on top of the black errorbar dots
+    ax.scatter(df["Coef"], df["Feature"], color=colors, s=markersize, zorder=3)
+
+    # Draw a clean vertical baseline reference at zero
+    ax.axvline(x=0, color="black", linestyle="--", alpha=0.5, linewidth=1.2)
+
+    # --- 4. Custom Styling (Clean Dictionary Approach) ---
+    ax.set(
+        xlabel=r"$\Delta T_m (^\circ C)$",
+        ylabel="",
+        title="Elastic Net Selected Mutation Effects",
+    )
+
+    ax.tick_params(axis="both", labelsize=font_size - 2)
+    ax.grid(axis="x", linestyle=":", alpha=0.6)
+
+    # Tighten margins around the elements cleanly
+    plt.tight_layout()
+
+    return ax
