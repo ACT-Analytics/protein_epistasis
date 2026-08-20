@@ -161,8 +161,3 @@ def construct_epistasis_table(
     
     return table
 
-
-# TODO: Center Plots to be equal aspect. 
-# TODO: Put into multiplicative. 
-# TODO: Change symbol for ones that use IP2. 
-# Plot: IP2 and IP1 on histograms to compare. 
