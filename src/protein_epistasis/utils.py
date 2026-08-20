@@ -2,6 +2,7 @@ import re
 from pathlib import Path
 
 import pandas as pd
+from itables import show, to_html_datatable
 
 
 def ls(
@@ -93,3 +94,104 @@ def replace_ones_pandas_mul(df: pd.DataFrame, s: pd.Series) -> pd.DataFrame:
     df_out = df.copy()
     df_out[cols] = df_out[cols].mul(s.T.values, axis=1)
     return df_out
+
+
+def show_table(df:pd.DataFrame, custom_filename:str='my_file', maxBytes: str ='10MB'):
+    """Shows a dataframe with itables
+
+    Notes: 
+        1. table-layout: auto allows columns to visually fluidly resize
+        2. display: inline-table stops the block container from claiming 100% space
+        3. Interactive column dropdown toggles
+        4. forces text onto one line so columns shrink as tight as possible
+        5. Individual column search filters enabled natively
+    """
+    if str(custom_filename).endswith('.csv'):
+        custom_filename = str(custom_filename)[:-4]
+
+    show(
+        df,
+        autoWidth=False,
+        style="table-layout: auto; display: inline-table; width: auto; margin: 0;", 
+        columnDefs=[{"className": "dt-nowrap", "targets": "_all"}],
+        maxBytes = maxBytes, 
+        # Correct itables argument: options are "header" or "footer"
+        column_filters="footer",
+        
+        # Grid layout allocation
+        layout={
+            "topStart": {
+                "buttons": [
+                    {
+                        "extend": "csvHtml5",
+                        "title": str(custom_filename)
+                    },
+                    "colvis"
+                ]
+            },
+            "topEnd": "search",       
+            "bottomStart": "info",    
+            "bottomEnd": "pageLength" 
+        }
+    )
+
+
+def save_table_html(df, custom_filename='my_file', output_path='interactive_table.html'):
+    """Generates an online standalone HTML file using public CDNs for itables configuration.
+
+    Notes: 
+        1. table-layout: auto allows columns to visually fluidly resize
+        2. display: inline-table stops the block container from claiming 100% space
+        3. Interactive column dropdown toggles
+        4. forces text onto one line so columns shrink as tight as possible
+        5. Individual column search filters enabled natively
+        6. Uses cloud CDNs to fetch table interactivity scripts on load
+    """
+    # 1. Sanitize the user's custom file export download name
+    if str(custom_filename).endswith('.csv'):
+        custom_filename = str(custom_filename)[:-4]
+
+    # 2. Generate the table HTML structure with online mode enabled
+    # When connected=True, itables automatically attaches script tags pointing to its CDN
+    table_body = to_html_datatable(
+        df,
+        connected=True,  # Pulls JS/CSS dependencies from public CDNs online
+        autoWidth=False,
+        style="table-layout: auto; display: inline-table; width: auto; margin: 0;", 
+        columnDefs=[{"className": "dt-nowrap", "targets": "_all"}],
+        column_filters="footer",
+        layout={
+            "topStart": {
+                "buttons": [
+                    {
+                        "extend": "csvHtml5",
+                        "title": str(custom_filename)
+                    },
+                    "colvis"
+                ]
+            },
+            "topEnd": "search",       
+            "bottomStart": "info",    
+            "bottomEnd": "pageLength" 
+        }
+    )
+
+    # 3. Construct the HTML document (The header no longer needs manual offline script injection)
+    complete_html = f"""<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>{custom_filename} Export</title>
+</head>
+<body>
+    <div style="padding: 20px;">
+        {table_body}
+    </div>
+</body>
+</html>"""
+
+    # 4. Handle all file-saving logic internally
+    with open(output_path, "w", encoding="utf-8") as f:
+        f.write(complete_html)
+        
+    print(f"Success: Online-dependent table saved to '{output_path}'")
