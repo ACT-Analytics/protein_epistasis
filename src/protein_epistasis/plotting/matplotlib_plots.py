@@ -248,7 +248,7 @@ def plot_elasticnet_tm_coefficients(
         ecolor="gray",
         capsize=3,
         elinewidth=1.5,
-        ms=markersize/2,
+        ms=markersize / 2,
     )
     # Overlay the colored scatter points on top of the black errorbar dots
     ax.scatter(df["Coef"], df["Feature"], color=colors, s=markersize, zorder=3)
@@ -269,4 +269,40 @@ def plot_elasticnet_tm_coefficients(
     # Tighten margins around the elements cleanly
     plt.tight_layout()
 
+    return ax
+
+
+def add_corner_text(
+    ax, text, corner="top_right", font_size=12, fontweight="normal", color="black"
+):
+    """
+    Adds a text block to any of the 4 corners of a plot using relative axes coordinates.
+    Supported corner values: 'top_right', 'top_left', 'bottom_right', 'bottom_left'
+    """
+    # Define coordinate and alignment configurations for each corner
+    corner_configs = {
+        "top_right": {"x": 0.95, "y": 0.95, "ha": "right", "va": "top"},
+        "top_left": {"x": 0.05, "y": 0.95, "ha": "left", "va": "top"},
+        "bottom_right": {"x": 0.95, "y": 0.05, "ha": "right", "va": "bottom"},
+        "bottom_left": {"x": 0.05, "y": 0.05, "ha": "left", "va": "bottom"},
+    }
+
+    # Fallback to top_right if an invalid string is provided
+    cfg = corner_configs.get(corner.lower(), corner_configs["top_right"])
+
+    ax.text(
+        cfg["x"],
+        cfg["y"],
+        text,
+        transform=ax.transAxes,
+        fontsize=font_size,
+        fontweight=fontweight,
+        color=color,
+        horizontalalignment=cfg["ha"],
+        verticalalignment=cfg["va"],
+        multialignment="left",
+        bbox={
+            "boxstyle": "round,pad=0.3", "facecolor": "white", "edgecolor": "none", "alpha": 0.7
+        },
+    )
     return ax
