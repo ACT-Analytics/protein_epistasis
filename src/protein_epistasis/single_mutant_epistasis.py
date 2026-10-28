@@ -72,7 +72,7 @@ def compute_epistasis(
 
     # 1. Thermal Shift: Additive Model
     if metric == "delta TM":
-        sum_sm = df[sm_cols].sum(axis=1)
+        sum_sm = df[sm_cols].fillna(0.0).sum(axis=1)
         epistasis = df[mutant_score_col] - sum_sm
         return df.assign(
             Sum_Single_Mutant_delta_TM=sum_sm,
@@ -84,36 +84,44 @@ def compute_epistasis(
     # DDG = RT * ln(KD_mut / KD_wt) = RT * ln(1 / Y)
     if metric == "KD FC":
         RT = R_KCAL * temp_k
-        prod_sm = df[sm_cols].replace(0, 1).prod(axis=1)
+        prod_sm = df[sm_cols].fillna(1.0).replace(0, 1.0).prod(axis=1)
+        
+        # DDG = RT * ln(KD_mut / KD_wt) = RT * ln(1 / FC)
         ddg_mut = RT * np.log(1.0 / df[mutant_score_col])
         ddg_sum = RT * np.log(1.0 / prod_sm)
-        epistasis = ddg_mut - ddg_sum
+        ddg_epistasis = ddg_mut - ddg_sum
+        fc_epistasis = df[mutant_score_col] / prod_sm
+
         return df.assign(
             KD_FC_mutant=df[mutant_score_col],
-            KD_FC_sm_prod = prod_sm,
-            epistasis_KD_FC = df[mutant_score_col] / prod_sm,
+            KD_FC_sm_prod=prod_sm,
+            epistasis_KD_FC=fc_epistasis,
             DDG_mutant=ddg_mut,
             DDG_sum_sm=ddg_sum,
-            epistasis_KD=epistasis,  # >0 means weaker binding than expected
-            synergy_kd = epistasis<0
+            epistasis_DDG=ddg_epistasis,  # < 0 indicates thermodynamic synergy (tighter binding)
+            synergy_kd=ddg_epistasis < 0,
         )
 
     # 3. EC50 Fold Improvement (Input = WT / Mutant)
     # Log Improvement Epistasis = ln(Y_observed) - sum(ln(x_single_mutants))
     if metric == "EC50 FI":
-        prod_sm = df[sm_cols].replace(0, 1).prod(axis=1)
-        log_mut = np.log(1/df[mutant_score_col])
-        log_sum = np.log(1.0 / prod_sm)
-        epistasis = log_mut - log_sum
+        prod_sm = df[sm_cols].fillna(1.0).replace(0, 1.0).prod(axis=1)
+        
+        # Direct log fold-improvement excess: > 0 means synergistic potency gain
+        log_fc_mut = np.log(df[mutant_score_col])
+        log_fc_sum = np.log(prod_sm)
+        log_epistasis = log_fc_mut - log_fc_sum
+        fc_epistasis = df[mutant_score_col] / prod_sm
+
         return df.assign(
             **{
-                "EC50(wt/mut)" : df[mutant_score_col],
+                "EC50(wt/mut)": df[mutant_score_col],
                 "EC50(prod(wt/sm))": prod_sm,
-                "epistasis EC50 FI":df[mutant_score_col]/prod_sm,
-                "LogEC50(mut/wt)": log_mut,
-                "LogEC50(prod(sm)/wt)": log_sum,
-                "epistasis_LogEC50": epistasis,  # >0 means synergistic potency gain
-                "positive_epistasis_EC50": df[mutant_score_col]/prod_sm>1
+                "epistasis_EC50_FI": fc_epistasis,
+                "Log_EC50_FC_mut": log_fc_mut,
+                "Log_EC50_FC_prod_sm": log_fc_sum,
+                "epistasis_Log_EC50": log_epistasis,  # > 0 means synergistic potency gain
+                "positive_epistasis_EC50": fc_epistasis > 1.0,
             }
         )
 
