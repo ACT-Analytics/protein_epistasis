@@ -1,7 +1,5 @@
 """Module for computing higher-order epistasis relative to constituent single mutants."""
 
-from collections.abc import Callable
-
 import numpy as np
 import pandas as pd
 from sklearn.feature_extraction.text import CountVectorizer
@@ -11,48 +9,42 @@ R_KCAL: float = 1.987204259e-3
 DEFAULT_TEMP_K: float = 298.15  # 25 °C
 
 
-def construct_mutant_to_single_mutant_table(
+def validate_and_construct_matrix(
     df: pd.DataFrame,
     mutation_col: str = "mutations",
     number_mutations_col: str = "num_mutations",
-    analyzer: Callable[[str], list[str]] | None = None,
-) -> pd.DataFrame:
-    """Constructs a binary indicator matrix (rows = variants, cols = unique single mutants).
-
-    Preserves the original DataFrame index.
-    """
-    mutations_clean = df[mutation_col].fillna("").astype(str).str.replace(":", "_")
-
-    # Extract unique single mutant identifiers
-    mask = df[number_mutations_col] == 1
-    single_mutants = pd.unique(mutations_clean.loc[mask])
-
-    if len(single_mutants) == 0:
-        raise ValueError(
-            f"No single mutants ({number_mutations_col} == 1) found in dataset."
-        )
-
-    # Default parser assumes comma-separated mutation strings
-    if analyzer is None:
-        analyzer = lambda x: [m.strip() for m in x.split(",")] if x else []
-
-    vectorizer = CountVectorizer(
+) -> tuple[pd.DataFrame, pd.Series]:
+    clean_series = df[mutation_col].fillna("").astype(str).str.replace(":", "_")
+    
+    # 1. Identify single mutants
+    mask_sm = df[number_mutations_col] == 1
+    single_mutants = pd.unique(clean_series.loc[mask_sm])
+    
+    # 2. Build indicator matrix
+    vec = CountVectorizer(
         vocabulary=single_mutants,
         binary=True,
         lowercase=False,
-        analyzer=analyzer,
+        analyzer=lambda x: [m.strip() for m in x.split(",")] if x else [],
     )
-
-    X_sparse = vectorizer.transform(mutations_clean)
-
-    return pd.DataFrame(
+    X_sparse = vec.transform(clean_series)
+    indicator_df = pd.DataFrame(
         X_sparse.toarray(),
         index=df.index,
-        columns=vectorizer.get_feature_names_out(),
+        columns=vec.get_feature_names_out(),
     )
+    
+    # 3. Check for unmeasured constituents
+    detected_counts = indicator_df.sum(axis=1)
+    missing_singles = df[number_mutations_col] != detected_counts
+    if missing_singles.any():
+        flagged = df.loc[missing_singles, mutation_col].tolist()
+        print(f"Warning: {len(flagged)} variants contain constituent mutations missing from the single-mutant reference set: {flagged[:3]}...")
+
+    return indicator_df, clean_series
 
 
-def replace_ones_with_series(df: pd.DataFrame, scores: pd.Series) -> pd.DataFrame:
+def map_single_mutant_scores(df: pd.DataFrame, scores: pd.Series) -> pd.DataFrame:
     """Scales binary indicator columns by the corresponding single-mutant score."""
     df_out = df.copy()
     valid_cols = [c for c in df.columns if c in scores.index]
@@ -136,7 +128,7 @@ def construct_epistasis_table(
     clean_series = df[mutation_col].fillna("").astype(str).str.replace(":", "_")
 
     # 1. Binary indicator matrix
-    single_mutant_df = construct_mutant_to_single_mutant_table(
+    single_mutant_df, clean_series = validate_and_construct_matrix(
         df=df,
         mutation_col=mutation_col,
         number_mutations_col=number_mutations_col,
@@ -153,8 +145,8 @@ def construct_epistasis_table(
         .mean()
     )
 
-    # 3. Scale indicators by single mutant scores
-    table = replace_ones_with_series(single_mutant_df, single_mutant_scores)
+    # 3. map single mutant scores to proper location in matrix
+    table = map_single_mutant_scores(single_mutant_df, single_mutant_scores)
 
     # 4. Attach observed score using the original row index
     table[new_score_name] = df[score_col]
