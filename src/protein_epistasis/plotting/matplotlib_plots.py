@@ -1,5 +1,7 @@
 # Authored By Christopher Rivera and Gemini.
 
+from typing import Literal
+
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -11,46 +13,133 @@ from sklearn.model_selection import KFold
 from .config import PLOT_PARAMETERS
 
 
+def add_corner_text(
+    ax: Axes,
+    text: str,
+    corner: Literal["top_left", "top_right", "bottom_left", "bottom_right"] = "top_left",
+    font_size: float = 9.0,
+    fontweight: str = "normal",
+    color: str = "#2D3748",
+    linespacing: float = 1.35,
+    box_facecolor: str = "none",
+    box_edgecolor: str = "none",
+) -> Axes:
+    """Adds a multiline text block to a specified corner of an axes."""
+    corner_configs = {
+        "top_left": {"x": 0.04, "y": 0.96, "ha": "left", "va": "top"},
+        "top_right": {"x": 0.96, "y": 0.96, "ha": "right", "va": "top"},
+        "bottom_left": {"x": 0.04, "y": 0.04, "ha": "left", "va": "bottom"},
+        "bottom_right": {"x": 0.96, "y": 0.04, "ha": "right", "va": "bottom"},
+    }
+    cfg = corner_configs.get(corner, corner_configs["top_left"])
+
+    if box_facecolor == "none" and box_edgecolor == "none":
+        bbox = None
+    else:
+        bbox = {
+            "boxstyle": "round,pad=0.45",
+            "facecolor": box_facecolor,
+            "edgecolor": box_edgecolor,
+            "linewidth": 0.75 if box_edgecolor != "none" else 0.0,
+        }
+
+    ax.text(
+        cfg["x"],
+        cfg["y"],
+        text,
+        transform=ax.transAxes,
+        fontsize=font_size,
+        fontweight=fontweight,
+        color=color,
+        horizontalalignment=cfg["ha"],
+        verticalalignment=cfg["va"],
+        multialignment="left",
+        linespacing=linespacing,
+        bbox=bbox,
+        zorder=5,
+    )
+    return ax
+
+
 def scatter_plot_with_identity(
     df: pd.DataFrame,
     x_col: str,
     y_col: str,
     ax: Axes,
-    hue: str = "Number of Mutations",
-    style: str | None = None,  # Column for distinct marker shapes
-    marker: str | dict | None = None,  # Fixed shape (e.g. 's', '^', 'D') or dict map
+    hue: str | None = "Number of Mutations",
+    style: str | None = None,
+    marker: str | dict | list | None = None,
     palette: str = "colorblind",
     xlabel: str | None = None,
     ylabel: str | None = None,
     title: str | None = None,
     markersize: int = 50,
-    limits: tuple[float, float] | None = None,
+    # Axis limit controls
+    limits: tuple[float, float] | list[float] | np.ndarray | tuple | list | None = None,
+    xlim: tuple[float, float] | list[float] | np.ndarray | None = None,
+    ylim: tuple[float, float] | list[float] | np.ndarray | None = None,
+    equal_limits: bool = True,
+    equal_aspect: bool = True,
     center: float | None = None,
     span: float | None = None,
     padding: float = 0.05,
-    ref_lines: tuple[float, ...] | float | None = (0,),
+    ref_lines: tuple[float, ...] | list[float] | np.ndarray | float | None = (0.0,),
     use_log: bool = False,
-    log_base: float = 10,
-    legend_outside: bool = True
+    log_base: float = 10.0,
+    auto_log_labels: bool = True,
+    show_legend: bool = True,
+    legend_outside: bool = True,
+    legend_title: str | None = None,
+    include_zero: bool = True,
+    # Font size controls
+    fontsize: float = 11.0,
+    title_fontsize: float | None = None,
+    label_fontsize: float | None = None,
+    tick_fontsize: float | None = None,
+    legend_fontsize: float | None = None,
+    corner_fontsize: float | None = None,
+    # Metadata corner text arguments
+    project: str | None = None,
+    data_source: str | None = None,
+    x_desc: str | None = None,
+    y_desc: str | None = None,
+    extra_entries: list[str] | None = None,
+    corner_text: str | list[str] | None = None,
+    corner_pos: Literal["top_left", "top_right"] | None = "top_left",
+    corner_facecolor: str = "none",
+    corner_edgecolor: str = "none",
 ) -> Axes:
-    data = df.copy()
+    # 1. Resolve hierarchical font sizes
+    res_title_size = title_fontsize if title_fontsize is not None else fontsize + 2
+    res_label_size = label_fontsize if label_fontsize is not None else fontsize
+    res_tick_size = tick_fontsize if tick_fontsize is not None else max(fontsize - 2, 7)
+    res_legend_size = legend_fontsize if legend_fontsize is not None else max(fontsize - 2, 7)
+    res_corner_size = corner_fontsize if corner_fontsize is not None else max(fontsize - 2, 7)
 
-    # Log transformation
+    # 2. Normalize reference lines safely
+    norm_ref_lines: tuple[float, ...] = ()
+    if ref_lines is not None:
+        if isinstance(ref_lines, (int, float, np.number)):
+            norm_ref_lines = (float(ref_lines),)
+        else:
+            norm_ref_lines = tuple(float(v) for v in np.asarray(ref_lines).ravel())
+
+    # 3. Handle log transformation and column mapping
     if use_log:
         log_fn = np.log10 if log_base == 10 else (np.log2 if log_base == 2 else np.log)
         x_plot = f"_log_{x_col}"
         y_plot = f"_log_{y_col}"
+
+        data = df[[c for c in [x_col, y_col, hue, style] if c is not None and c in df.columns]].copy()
         data[x_plot] = log_fn(data[x_col])
         data[y_plot] = log_fn(data[y_col])
-
-        if ref_lines is not None:
-            if isinstance(ref_lines, (int, float)):
-                ref_lines = (ref_lines,)
-            ref_lines = tuple(log_fn(val) for val in ref_lines if val > 0)
+        norm_ref_lines = tuple(float(log_fn(val)) for val in norm_ref_lines if val > 0)
+        include_zero = False
     else:
         x_plot, y_plot = x_col, y_col
+        data = df
 
-    # Prepare marker / style arguments for Seaborn
+    # 4. Configure marker and style mappings
     scatter_kwargs = {}
     if style is not None:
         scatter_kwargs["style"] = style
@@ -59,15 +148,19 @@ def scatter_plot_with_identity(
     elif marker is not None and isinstance(marker, str):
         scatter_kwargs["marker"] = marker
 
-    # Scatter plot
-    ax = sns.scatterplot(
+    # 5. Draw scatter points
+    has_hue = hue is not None and (hue in data.columns if isinstance(hue, str) else True)
+    has_style = style is not None and (style in data.columns if isinstance(style, str) else True)
+    draw_legend = show_legend and (has_hue or has_style)
+
+    sns.scatterplot(
         data=data,
         x=x_plot,
         y=y_plot,
-        hue=hue,
+        hue=hue if (isinstance(hue, str) and hue in data.columns) else None,
         palette=palette,
-        alpha=0.75,
-        legend=True,
+        alpha=0.8,
+        legend=draw_legend,
         edgecolor="black",
         linewidth=0.3,
         ax=ax,
@@ -75,44 +168,103 @@ def scatter_plot_with_identity(
         **scatter_kwargs,
     )
 
-    # Identity line (y = x)
-    ax.axline((0, 0), slope=1, color="#4A5568", linestyle="--", alpha=0.3)
+    # 6. Identity line (y = x)
+    ax.axline((0, 0), slope=1, color="#4A5568", linestyle="--", alpha=0.4, zorder=1)
 
-    # Reference lines
-    if ref_lines is not None:
-        if isinstance(ref_lines, (int, float)):
-            ref_lines = (ref_lines,)
-        for val in ref_lines:
-            ax.axhline(val, color="#A0AEC0", linestyle=":", alpha=0.75, linewidth=1)
-            ax.axvline(val, color="#A0AEC0", linestyle=":", alpha=0.75, linewidth=1)
+    # 7. Reference lines
+    for val in norm_ref_lines:
+        ax.axhline(val, color="#A0AEC0", linestyle=":", alpha=0.75, linewidth=1, zorder=1)
+        ax.axvline(val, color="#A0AEC0", linestyle=":", alpha=0.75, linewidth=1, zorder=1)
 
-    if not xlabel:
-        xlabel = x_col.replace("_", " ")
-    if not ylabel:
-        ylabel = y_col.replace("_", " ")
-    ax.set(xlabel=xlabel, ylabel=ylabel, title=title)
+    # 8. Labels, title, and tick font sizes
+    raw_xlabel = xlabel if xlabel is not None else x_col.replace("_", " ")
+    raw_ylabel = ylabel if ylabel is not None else y_col.replace("_", " ")
 
-    # Determine identical limits
-    if limits is not None:
-        low, high = limits
-    elif center is not None:
-        if span is None:
-            max_dist = max(
-                abs(data[x_plot].min() - center),
-                abs(data[x_plot].max() - center),
-                abs(data[y_plot].min() - center),
-                abs(data[y_plot].max() - center),
-                abs(0 - center),
-            )
-            half_span = max_dist * (1 + padding)
+    if use_log and auto_log_labels:
+        if log_base == 10:
+            log_sym = r"\log_{10}"
+        elif log_base == 2:
+            log_sym = r"\log_{2}"
+        elif np.isclose(log_base, np.e):
+            log_sym = r"\ln"
         else:
-            half_span = span / 2.0
-        low, high = center - half_span, center + half_span
-    else:
-        min_val = min(data[x_plot].min(), data[y_plot].min(), 0)
-        max_val = max(data[x_plot].max(), data[y_plot].max(), 0)
+            log_sym = f"\\log_{{{log_base}}}"
 
-        if span is not None:
+        def _format_log_label(lbl: str) -> str:
+            clean = lbl.strip()
+            if clean.lower().startswith(("log", r"$\log", r"\log", "ln", r"$\ln", r"\ln")):
+                return clean
+            return f"${log_sym}$ ({clean})"
+
+        resolved_xlabel = _format_log_label(raw_xlabel)
+        resolved_ylabel = _format_log_label(raw_ylabel)
+    else:
+        resolved_xlabel = raw_xlabel
+        resolved_ylabel = raw_ylabel
+
+    ax.set_xlabel(resolved_xlabel, fontsize=res_label_size)
+    ax.set_ylabel(resolved_ylabel, fontsize=res_label_size)
+    if title is not None:
+        ax.set_title(title, fontsize=res_title_size)
+    ax.tick_params(axis="both", labelsize=res_tick_size)
+
+    # 9. Enforce equal limits unless explicitly specified otherwise
+    spec_x: tuple[float, float] | None = None
+    spec_y: tuple[float, float] | None = None
+
+    if xlim is not None:
+        arr_x = np.asarray(xlim, dtype=float).ravel()
+        spec_x = (float(arr_x[0]), float(arr_x[1]))
+
+    if ylim is not None:
+        arr_y = np.asarray(ylim, dtype=float).ravel()
+        spec_y = (float(arr_y[0]), float(arr_y[1]))
+
+    if limits is not None:
+        arr_lim = np.asarray(limits, dtype=float)
+        if arr_lim.ndim == 2 and arr_lim.shape == (2, 2):
+            if spec_x is None:
+                spec_x = (float(arr_lim[0, 0]), float(arr_lim[0, 1]))
+            if spec_y is None:
+                spec_y = (float(arr_lim[1, 0]), float(arr_lim[1, 1]))
+        elif arr_lim.size == 2:
+            flat = arr_lim.ravel()
+            shared = (float(flat[0]), float(flat[1]))
+            if spec_x is None:
+                spec_x = shared
+            if spec_y is None:
+                spec_y = shared
+        elif arr_lim.size == 4:
+            flat = arr_lim.ravel()
+            if spec_x is None:
+                spec_x = (float(flat[0]), float(flat[1]))
+            if spec_y is None:
+                spec_y = (float(flat[2]), float(flat[3]))
+
+    def _compute_bounds(series_list: list[pd.Series]) -> tuple[float, float]:
+        min_cands = [float(s.min()) for s in series_list if not s.empty and not s.isna().all()]
+        max_cands = [float(s.max()) for s in series_list if not s.empty and not s.isna().all()]
+        if not min_cands or not max_cands:
+            return (0.0, 1.0)
+        if include_zero:
+            min_cands.append(0.0)
+            max_cands.append(0.0)
+
+        min_val = min(min_cands)
+        max_val = max(max_cands)
+
+        if center is not None:
+            if span is None:
+                max_dist = max(
+                    abs(min_val - center),
+                    abs(max_val - center),
+                    abs(0.0 - center) if include_zero else 0.0,
+                )
+                half_span = max_dist * (1 + padding)
+            else:
+                half_span = span / 2.0
+            low, high = center - half_span, center + half_span
+        elif span is not None:
             c = (min_val + max_val) / 2.0
             low, high = c - span / 2.0, c + span / 2.0
         else:
@@ -120,20 +272,90 @@ def scatter_plot_with_identity(
             pad_val = (range_val * padding) if range_val != 0 else 1.0
             low, high = min_val - pad_val, max_val + pad_val
 
-    if limits is None:
-        low = min(low, 0)
-        high = max(high, 0)
+        if include_zero:
+            low = min(low, 0.0)
+            high = max(high, 0.0)
 
-    ax.set_xlim(low, high)
-    ax.set_ylim(low, high)
-    ax.set_aspect("equal", adjustable="box")
+        return float(low), float(high)
 
-    if legend_outside: 
-        ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+    # Resolution cascade
+    if spec_x is not None and spec_y is not None:
+        # Both explicitly given -> respect distinct values
+        resolved_xlim, resolved_ylim = spec_x, spec_y
+    elif spec_x is not None and spec_y is None:
+        # Only X given -> Y inherits X to maintain equal limits
+        resolved_xlim, resolved_ylim = spec_x, spec_x
+    elif spec_y is not None and spec_x is None:
+        # Only Y given -> X inherits Y to maintain equal limits
+        resolved_xlim, resolved_ylim = spec_y, spec_y
+    else:
+        # Neither given -> use pooled data bounds if equal_limits is True
+        if equal_limits:
+            shared_bounds = _compute_bounds([data[x_plot], data[y_plot]])
+            resolved_xlim, resolved_ylim = shared_bounds, shared_bounds
+        else:
+            resolved_xlim = _compute_bounds([data[x_plot]])
+            resolved_ylim = _compute_bounds([data[y_plot]])
+
+    ax.set_xlim(resolved_xlim[0], resolved_xlim[1])
+    ax.set_ylim(resolved_ylim[0], resolved_ylim[1])
+
+    if equal_aspect:
+        ax.set_aspect("equal", adjustable="box")
+    else:
+        ax.set_aspect("auto")
+
+    # 10. Multi-line corner metadata text (transparent by default)
+    if corner_pos is not None:
+        entries: list[str] = []
+
+        if corner_text is not None:
+            if isinstance(corner_text, str):
+                entries.extend(corner_text.strip().splitlines())
+            else:
+                entries.extend(corner_text)
+        else:
+            if project is not None:
+                entries.append(f"Project: {project}")
+            if data_source is not None:
+                entries.append(f"Data Source: {data_source}")
+            if x_desc is not None:
+                entries.append(f"X: {x_desc}")
+            if y_desc is not None:
+                entries.append(f"Y: {y_desc}")
+            if extra_entries is not None:
+                entries.extend(extra_entries)
+
+        if entries:
+            formatted_text = "\n".join(entries)
+            add_corner_text(
+                ax,
+                formatted_text,
+                corner=corner_pos,
+                font_size=res_corner_size,
+                box_facecolor=corner_facecolor,
+                box_edgecolor=corner_edgecolor,
+            )
+
+    # 11. Legend positioning, styling, and font sizing
+    current_legend = ax.get_legend()
+    if not show_legend:
+        if current_legend is not None:
+            current_legend.remove()
+    elif current_legend is not None:
+        resolved_title = legend_title or current_legend.get_title().get_text()
+        move_kwargs = {
+            "title": resolved_title if resolved_title else None,
+            "fontsize": res_legend_size,
+            "title_fontsize": res_legend_size + 1,
+            "frameon": True,
+        }
+        if legend_outside:
+            sns.move_legend(ax, loc="upper left", bbox_to_anchor=(1.02, 1.0), **move_kwargs)
+        else:
+            sns.move_legend(ax, loc="best", **move_kwargs)
 
     return ax
-
-
 def plot_epi_scatterplots(
     df: pd.DataFrame,
     dataset: str = "",
@@ -143,7 +365,7 @@ def plot_epi_scatterplots(
     markersize: float = 100,
     title_fontsize: int = 20,
     style: str | None = None,
-    legend_outside=True
+    legend_outside=True,
 ):
     if not measurements:
         measurements = ["delta TM", "Binding Multiplicative", "EC50 Multiplicative"]
@@ -171,7 +393,7 @@ def plot_epi_scatterplots(
             markersize=markersize,
             style=current_style,
             **PLOT_PARAMETERS[measurement],
-            legend_outside=legend_outside
+            legend_outside=legend_outside,
         )
 
     title_text = (
@@ -277,38 +499,3 @@ def plot_elasticnet_tm_coefficients(
 
     return ax
 
-
-def add_corner_text(
-    ax, text, corner="top_right", font_size=12, fontweight="normal", color="black"
-):
-    """
-    Adds a text block to any of the 4 corners of a plot using relative axes coordinates.
-    Supported corner values: 'top_right', 'top_left', 'bottom_right', 'bottom_left'
-    """
-    # Define coordinate and alignment configurations for each corner
-    corner_configs = {
-        "top_right": {"x": 0.95, "y": 0.95, "ha": "right", "va": "top"},
-        "top_left": {"x": 0.05, "y": 0.95, "ha": "left", "va": "top"},
-        "bottom_right": {"x": 0.95, "y": 0.05, "ha": "right", "va": "bottom"},
-        "bottom_left": {"x": 0.05, "y": 0.05, "ha": "left", "va": "bottom"},
-    }
-
-    # Fallback to top_right if an invalid string is provided
-    cfg = corner_configs.get(corner.lower(), corner_configs["top_right"])
-
-    ax.text(
-        cfg["x"],
-        cfg["y"],
-        text,
-        transform=ax.transAxes,
-        fontsize=font_size,
-        fontweight=fontweight,
-        color=color,
-        horizontalalignment=cfg["ha"],
-        verticalalignment=cfg["va"],
-        multialignment="left",
-        bbox={
-            "boxstyle": "round,pad=0.3", "facecolor": "white", "edgecolor": "none", "alpha": 0.7
-        },
-    )
-    return ax
