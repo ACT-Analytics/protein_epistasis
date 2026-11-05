@@ -31,6 +31,7 @@ def scatter_plot_with_identity(
     ref_lines: tuple[float, ...] | float | None = (0,),
     use_log: bool = False,
     log_base: float = 10,
+    legend_outside: bool = True
 ) -> Axes:
     data = df.copy()
 
@@ -127,6 +128,9 @@ def scatter_plot_with_identity(
     ax.set_ylim(low, high)
     ax.set_aspect("equal", adjustable="box")
 
+    if legend_outside: 
+        ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+
     return ax
 
 
@@ -139,6 +143,7 @@ def plot_epi_scatterplots(
     markersize: float = 100,
     title_fontsize: int = 20,
     style: str | None = None,
+    legend_outside=True
 ):
     if not measurements:
         measurements = ["delta TM", "Binding Multiplicative", "EC50 Multiplicative"]
@@ -166,6 +171,7 @@ def plot_epi_scatterplots(
             markersize=markersize,
             style=current_style,
             **PLOT_PARAMETERS[measurement],
+            legend_outside=legend_outside
         )
 
     title_text = (
