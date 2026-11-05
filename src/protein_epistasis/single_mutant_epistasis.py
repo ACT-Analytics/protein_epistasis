@@ -40,7 +40,7 @@ def validate_and_construct_matrix(
     if missing_singles.any():
         flagged = df.loc[missing_singles, mutation_col].tolist()
         print(f"Warning: {len(flagged)} variants contain constituent mutations missing from the single-mutant reference set: {flagged[:3]}...")
-
+    indicator_df.index = clean_series.tolist()
     return indicator_df, clean_series
 
 
@@ -74,12 +74,15 @@ def compute_epistasis(
     # 2. KD Fold Change (Input = WT / Mutant, i.e., Fold Improvement)
     # DDG = RT * ln(KD_mut / KD_wt) = RT * ln(1 / Y)
     if metric == "KD FC":
+
         RT = R_KCAL * temp_k
+        multiple_mutant_fc = df[mutant_score_col]
         prod_sm = df[sm_cols].fillna(1.0).replace(0, 1.0).prod(axis=1)
-        ddg_mut = RT * np.log(1.0 / df[mutant_score_col])
+        
+        ddg_mut = RT * np.log(1.0 / multiple_mutant_fc)
         ddg_sum = RT * np.log(1.0 / prod_sm)
         ddg_epistasis = ddg_mut - ddg_sum
-        fc_epistasis = df[mutant_score_col] / prod_sm
+        fc_epistasis = multiple_mutant_fc/ prod_sm
 
         return df.assign(
             KD_FC_mutant=df[mutant_score_col],
@@ -94,15 +97,16 @@ def compute_epistasis(
     # 3. EC50 Fold Improvement (Input = WT / Mutant)
     # Log Fold-Improvement Epistasis = ln(Y_observed) - sum(ln(x_single_mutants))
     if metric == "EC50 FI":
+        multiple_mutant_ec50_fi =  df[mutant_score_col]
         prod_sm = df[sm_cols].fillna(1.0).replace(0, 1.0).prod(axis=1)
         log_fc_mut = np.log(df[mutant_score_col])
         log_fc_sum = np.log(prod_sm)
         log_epistasis = log_fc_mut - log_fc_sum
-        fc_epistasis = df[mutant_score_col] / prod_sm
+        fc_epistasis =multiple_mutant_ec50_fi / prod_sm
 
         return df.assign(
             **{
-                "EC50(wt/mut)": df[mutant_score_col],
+                "EC50(wt/mut)": multiple_mutant_ec50_fi,
                 "EC50(prod(wt/sm))": prod_sm,
                 "epistasis_EC50_FI": fc_epistasis,
                 "Log_EC50_FC_mut": log_fc_mut,
@@ -134,6 +138,7 @@ def construct_epistasis_table(
         number_mutations_col=number_mutations_col,
     )
 
+
     # 2. Extract and average single-mutant scores across replicates if present
     single_mask = df[number_mutations_col] == 1
     single_mutant_scores = (
@@ -148,8 +153,11 @@ def construct_epistasis_table(
     # 3. map single mutant scores to proper location in matrix
     table = map_single_mutant_scores(single_mutant_df, single_mutant_scores)
 
+    # add the index 
+    
+
     # 4. Attach observed score using the original row index
-    table[new_score_name] = df[score_col]
+    table[new_score_name] = df[score_col].values
 
     # 5. Compute epistasis metrics
     table = compute_epistasis(

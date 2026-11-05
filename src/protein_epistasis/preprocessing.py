@@ -75,7 +75,7 @@ def average_numeric_columns_in_dataframe(df: pd.DataFrame) -> pd.DataFrame:
 
     # Calculate means for numeric columns
     numeric_means = df.mean(numeric_only=True)
-
+    print(numeric_means.index)
     # Assign calculated mean values back to numeric columns safely
     for col in numeric_means.index:
         result[col] = numeric_means[col]
@@ -308,7 +308,8 @@ def preprocess_pipeline(
     df,
     assign_tm:bool = True,
     calculate_kd_FC:bool = False,
-    convert_to_nM: bool = False
+    convert_to_nM: bool = False, 
+    average_parents:bool = True
     )-> pd.DataFrame:
 
     df = df.copy()
@@ -321,7 +322,8 @@ def preprocess_pipeline(
     df = process_mutations(df)
 
     # Step 3: Consolidate
-    df = average_parental_rows(df)
+    if average_parents: 
+        df = average_parental_rows(df)
 
     # Step 4: Compute delta TM relative to parental baseline (25.0°C)
     df = compute_tm_delta(df)
